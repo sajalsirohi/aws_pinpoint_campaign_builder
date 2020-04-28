@@ -1,0 +1,30 @@
+{
+    "Dimensions": {
+        "Demographic": {
+            "Channel": {
+                "DimensionType": "INCLUSIVE",
+                "Values": [
+                ]
+            }
+        }
+    },
+    "Name": "dynamic_segment",
+    "SegmentGroups": {
+        "Groups": [
+            {
+                "Dimensions": [
+                    {
+                        "Demographic":
+                            {
+                                "Channel": {
+                                    "DimensionType": "INCLUSIVE",
+                                    "Values": [
+                                    ]
+                                }
+                            }
+                    }
+                ],
+                "SourceSegments": [
+                    {
+                        "Id": ""
+                    }]}]}}
