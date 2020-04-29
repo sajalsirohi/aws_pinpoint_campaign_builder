@@ -31,6 +31,7 @@ class PinpointCampaignBuilder:
                  csv_file_fields=None,
                  email_data=None,
                  sms_data=None,
+                 from_address=None,
                  **additional_args):
         """
             param: s3_bucket_name:      This bucket is used to store the csv file and all project
@@ -97,19 +98,20 @@ class PinpointCampaignBuilder:
         self.region_pinpoint = region if region else boto3.session.Session().region_name
         self.client_pinpoint = boto3.client('pinpoint',region_name=self.region_pinpoint)
 
-        self.application_name = additional_args['application_name'] if 'application_name' in \
-                                                                       additional_args else str(datetime.now())[
-                                                                                            :-7]  # keeping name till seconds
+        self.application_name = application_name if application_name  else str(datetime.now())[:-7]  # keeping name till seconds
 
         self.application_id = application_id if application_id \
                               else self.create_application(self.application_name)
 
         if 'EMAIL' in channel_type:
             assert ses_identity_arn, 'Please provide ses_identity_role param if you are using EMAIL channel'
+            from_address = from_address if from_address else ses_identity_arn.split('/')[-1]
             self.email_obj = Email(self.client_pinpoint, self.application_id)
+            self.email_obj.update_channel(ses_identity_arn, from_address, pinpoint_access_role_arn)
 
         if 'SMS' in channel_type:
             self.sms_obj = Sms(self.client_pinpoint, self.application_id)
+            self.sms_obj.update_channel()
 
         if s3_bucket_name:
             self.s3_bucket = s3_bucket_name
@@ -687,11 +689,11 @@ class PinpointCampaignBuilder:
 
     def send_txn_sms(self,
                     origination_number=None,
-                    desitnation_number=None,
+                    destination_number=None,
                     message="Hello from pinpoint",
                     message_type='TRANSACTIONAL',
-                    registered_keyword=None,
-                    sender_id=None,
+                    registered_keyword='',
+                    sender_id='',
                     char_set="UTF-8"):
         """
         Send transaction emails from your pinpoint application. Can be used for testing of your email.
@@ -718,7 +720,7 @@ class PinpointCampaignBuilder:
                 ApplicationId=self.application_id,
                 MessageRequest={
                     'Addresses': {
-                        desitnation_number: {
+                        destination_number: {
                             'ChannelType': 'SMS'
                         }
                     },
@@ -738,7 +740,7 @@ class PinpointCampaignBuilder:
             print(e.response['Error']['Message'])
         else:
             print("Message sent! Message ID: "
-                    + response['MessageResponse']['Result'][desitnation_number]['MessageId'])
+                    + response['MessageResponse']['Result'][destination_number]['MessageId'])
 
     
     def get_application_analytics(self):
@@ -862,13 +864,13 @@ class PinpointCampaignBuilder:
         """
         Prints all the value of the attributes
         """
-        print_statement = f'Application Id  -->  \t\t {self.application_id}\n'\
-                          f'Application Name  -->  \t\t {self.application_name}\n'\
-                          f'Base segment Id  -->  \t\t {self.base_segment_id}\n'\
-                          f'Email dynamic segment Id  -->   {self.email_dynamic_segment_id}\n'\
-                          f'SMS dynamic segment Id  -->   {self.sms_dynamic_segment_id}\n'\
-                          f'Channel Types selected  -->   {self.channel_type}\n'\
-                          f'Bucket Name  -->  \t\t {self.s3_bucket}\n'\
-                          f'Current Region -->  \t\t {self.region_pinpoint}\n'\
-                          f'Segment Id used for campaign -->  {self.segment_id_for_campaign}'
+        print_statement = f'Application Id    \t\t--> {self.application_id}\n'\
+                          f'Application Name    \t\t--> {self.application_name}\n'\
+                          f'Base segment Id    \t\t--> {self.base_segment_id}\n'\
+                          f'Email dynamic segment Id     --> {self.email_dynamic_segment_id}\n'\
+                          f'SMS dynamic segment Id       --> {self.sms_dynamic_segment_id}\n'\
+                          f'Channel Types selected       --> {self.channel_type}\n'\
+                          f'Bucket Name    \t\t--> {self.s3_bucket}\n'\
+                          f'Current Region   \t\t--> {self.region_pinpoint}\n'\
+                          f'Segment Id used for campaign --> {self.segment_id_for_campaign}'
         return print_statement

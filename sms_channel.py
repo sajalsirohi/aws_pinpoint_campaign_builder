@@ -72,7 +72,7 @@ class Sms(Channel):
 
 
     def channel_details(self, 
-                        return_response=False):
+                        return_response=True):
         """
         Returns the details of email channel
         """
