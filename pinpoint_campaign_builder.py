@@ -117,6 +117,8 @@ class PinpointCampaignBuilder:
 
         self.segment_id_for_campaign = None
 
+        self.s3_folder_path = None
+
         self.pinpoint_acc_arn = pinpoint_access_role_arn
 
         self.channel_type = channel_type
@@ -792,3 +794,42 @@ class PinpointCampaignBuilder:
         if len(str(data)) > 5:
             return float(round(Decimal(data), 2))
         return int(round(Decimal(data)))
+
+
+    def s3_bucket_details(self,
+                          s3_bucket=None,
+                          s3_folder_path=None,
+                          **additional_args):
+        """
+            Read application details from the s3_bucket. Default path will be {s3_bucket}/{application_id}/application_details.json
+            if s3_file_path is not given
+        """
+        self.s3_bucket = s3_bucket
+        self.s3_obj = s3_utility(self.s3_bucket)
+        self.s3_folder_path = s3_folder_path if s3_folder_path else f'{self.application_id}'
+
+
+    def fetch_pinpoint_data_from_s3(self):
+        """
+            Read pinpoint application details.json file from the s3 bucket, using s3_folder_path if provided
+        """
+        assert self.s3_bucket, 'Set s3 details using the s3_bucket_details method'
+        application_details = self.s3_obj.get_json_file(f'{self.s3_folder_path}/application_details.json')
+        self.base_segment_id = application_details['base_segment_id'] if 'base_segment_id' in application_details else None
+        self.email_dynamic_segment_id = application_details['email_dynamic_segment_id'] if 'email_dynamic_segment_id' in\
+                               application_details else None
+        self.sms_dynamic_segment_id = application_details['sms_dynamic_segment_id'] if 'sms_dynamic_segment_id' in\
+                               application_details else None     
+
+    
+    def update_pinpoint_data_to_s3(self):
+        """
+            Update/create application_details.json file in the s3 bucket, using s3_folder_path if provided.
+        """
+        assert self.s3_bucket, 'Set s3 details using s3_bucket_details method'
+        data_json = {
+            'base_segment_id': self.base_segment_id,
+            'email_dynamic_segment_id': self.email_dynamic_segment_id,
+            'sms_dynamic_segment_id': self.sms_dynamic_segment_id
+        }
+        self.s3_obj.upload_json_to_s3(f'{self.s3_folder_path}/application_details.json')

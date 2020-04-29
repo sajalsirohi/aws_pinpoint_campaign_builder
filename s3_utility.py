@@ -27,7 +27,7 @@ class s3_utility:
                             please check this functionality')
 
     
-    def put_data_to_s3(self, file_name, file_data):
+    def put_json_to_s3(self, file_name, file_data):
         """
             Helper function to put data to S3
             :param file_name: Name of the file
