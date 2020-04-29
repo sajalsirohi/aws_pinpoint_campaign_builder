@@ -6,14 +6,14 @@ import csv
 import json
 import time
 from datetime import datetime
-from email import Email
+from email_channel import Email
 from decimal import Decimal
 
 import boto3
 from botocore.exceptions import ClientError
 
 from s3_utility import s3_utility
-from sms import Sms
+from sms_channel import Sms
 
 
 class PinpointCampaignBuilder:
@@ -114,6 +114,9 @@ class PinpointCampaignBuilder:
         if s3_bucket_name:
             self.s3_bucket = s3_bucket_name
             self.s3_obj = s3_utility(self.s3_bucket)
+        else:
+            self.s3_bucket = None
+            self.s3_obj = None
 
         self.segment_id_for_campaign = None
 
@@ -163,6 +166,26 @@ class PinpointCampaignBuilder:
             }
         )
         return response if return_full_response else response['ApplicationResponse']['Id']
+
+
+    def delete_application(self,
+                           application_id=[]):
+        """
+        Deletes application given the application ID. If no id is given, uses self.application_id
+        """
+        if not application_id:
+            application_id.append(self.application_id)
+    
+        [self.client_pinpoint.delete_app(ApplicationId=app_id) for app_id in application_id]
+
+
+    def delete_all_apps(self):
+        """
+        Deletes all the pinpoint applications
+        """
+        response = self.client_pinpoint.get_apps()
+        all_application_ids = [item['Id'] for item in response['ApplicationsResponse']['Item']]
+        self.delete_application(all_application_ids)
 
 
     def get_segments(self):
@@ -832,4 +855,20 @@ class PinpointCampaignBuilder:
             'email_dynamic_segment_id': self.email_dynamic_segment_id,
             'sms_dynamic_segment_id': self.sms_dynamic_segment_id
         }
-        self.s3_obj.upload_json_to_s3(f'{self.s3_folder_path}/application_details.json')
+        self.s3_obj.upload_json_to_s3(f'{self.s3_folder_path}/application_details.json', data_json)
+
+
+    def __str__(self):
+        """
+        Prints all the value of the attributes
+        """
+        print_statement = f'Application Id  -->  \t\t {self.application_id}\n'\
+                          f'Application Name  -->  \t\t {self.application_name}\n'\
+                          f'Base segment Id  -->  \t\t {self.base_segment_id}\n'\
+                          f'Email dynamic segment Id  -->   {self.email_dynamic_segment_id}\n'\
+                          f'SMS dynamic segment Id  -->   {self.sms_dynamic_segment_id}\n'\
+                          f'Channel Types selected  -->   {self.channel_type}\n'\
+                          f'Bucket Name  -->  \t\t {self.s3_bucket}\n'\
+                          f'Current Region -->  \t\t {self.region_pinpoint}\n'\
+                          f'Segment Id used for campaign -->  {self.segment_id_for_campaign}'
+        return print_statement
