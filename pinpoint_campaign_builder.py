@@ -6,14 +6,14 @@ import csv
 import json
 import time
 from datetime import datetime
-from email_channel import Email
+from .email_channel.email_channel import Email
 from decimal import Decimal
 
 import boto3
 from botocore.exceptions import ClientError
 
-from s3_utility import s3_utility
-from sms_channel import Sms
+from .s3_utility.s3_utility import s3_utility
+from .sms_channel.sms_channel import Sms
 
 
 class PinpointCampaignBuilder:
@@ -128,9 +128,18 @@ class PinpointCampaignBuilder:
 
         self.email_dynamic_segment_id = email_dynamic_segment_id
 
+        if s3_bucket_name:
+            self.s3_bucket = s3_bucket_name
+            self.s3_obj = s3_utility(self.s3_bucket)
+        else:
+            self.s3_bucket = None
+            self.s3_obj = None
+
         if application_exists:
-            self.fetch_pinpoint_data_from_s3()
-            self.__get_channels()
+            if self.s3_bucket:
+                self.fetch_pinpoint_data_from_s3()
+            if not channel_type:
+                self.__get_channels()
 
         assert self.channel_type, 'channel_type argument can not be empty. Eg. ["EMAIL","SMS"] | ["EMAIL"] | ["SMS"]'
 
@@ -144,15 +153,7 @@ class PinpointCampaignBuilder:
         if 'SMS' in channel_type:
             self.sms_obj = Sms(self.client_pinpoint, self.application_id)
             if not application_exists:
-            self.sms_obj.update_channel()
-
-        if s3_bucket_name:
-            self.s3_bucket = s3_bucket_name
-            self.s3_obj = s3_utility(self.s3_bucket)
-        else:
-            self.s3_bucket = None
-            self.s3_obj = None
-
+                self.sms_obj.update_channel()
 
 
     def __get_channels(self):
@@ -370,8 +371,8 @@ class PinpointCampaignBuilder:
                                   s3_csv_file_path=None,
                                   bucket_name=None,
                                   import_job_request=None,
-                                  file_name='pinpoint_data.csv',
-                                  update_base_segment=True,
+                                  file_name='pinpoint_details.csv',
+                                  update_base_segment=False,
                                   import_segment_name='Base Segment',
                                   **additional_args):
         """
@@ -429,7 +430,7 @@ class PinpointCampaignBuilder:
 
         response = self.client_pinpoint.create_import_job(
             ApplicationId=self.application_id,
-            ImportRequestJob=import_job_request
+            ImportJobRequest=import_job_request
         )
 
         job_id = response['ImportJobResponse']['Id']
@@ -516,6 +517,9 @@ class PinpointCampaignBuilder:
                    local_csv_file_name='/tmp/pp_details.csv',
                    upload_to_s3=False,
                    csv_file_fields=None,
+                   s3_file_path=None,
+                   s3_file_name='pinpoint_details.csv',
+                   s3_bucket_name=None,
                    **additional_args):
         """
             Create a csv file which will be imported into your pinpoint project. Either create and save the file locally
@@ -527,16 +531,16 @@ class PinpointCampaignBuilder:
             param: upload_to_s3         : True | False. If true, will be uploaded to s3 using the default file path if 
                                           s3_file_path is not provided.
 
-            param: additional_args      : s3_csv_file_name  -> Name of the file when uploaded to s3. If not given,
+            param: s3_csv_file_name     : Name of the file when uploaded to s3. If not given,
                                                                value will be pp_details.csv. path -->
                                                                bucket_name/application_id/pp_details.csv
 
-                                          s3_file_path      -> Name of whole path instead of using the default path.
-                                                               Then file will be stored in the specified path.
-                                                               bucket_name/{some_specific_path}.csv. 
-                                                               The whole path should be given.
+            param: s3_file_path         : Name of whole path instead of using the default path.
+                                          Then file will be stored in the specified path.
+                                          bucket_name/{some_specific_path}.csv. 
+                                          The whole path should be given.
                                           
-                                          s3_bucket_name    -> bucket name where the file will be stored
+            param:s3_bucket_name        : bucket name where the file will be stored
         """
         assert self.csv_file_fields or csv_file_fields, 'Please provide csv_file_fields parameter'
         if csv_file_fields:
@@ -547,7 +551,7 @@ class PinpointCampaignBuilder:
             with open(local_csv_file_name, 'w') as csv_file:
                 csv_writer = csv.writer(csv_file)
                 csv_writer.writerow(self.csv_file_fields)
-                csv_writer.writerows(self.sms_data)
+                csv_writer.writerows(self.email_data)
 
         if 'SMS' in self.channel_type:
             assert self.sms_data, 'Provide sms_data using the method set_sms_data'
@@ -566,8 +570,7 @@ class PinpointCampaignBuilder:
             s3_csv_file_name = additional_args['s3_csv_file_name'] if 's3_csv_file_name' in additional_args \
                                else 'pinpoint_details.csv'
 
-            s3_file_path = additional_args['s3_file_path'] if 's3_file_path' in additional_args \
-                               else f'{self.application_id}/{s3_csv_file_name}'
+            s3_file_path = s3_file_path if s3_file_path else f'{self.application_id}/{s3_csv_file_name}'
 
             assert s3_file_path.endswith('.csv'), 's3_file_path should end with .csv'
 

@@ -1,13 +1,13 @@
 # For more help and to understand the return structure go to 
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/pinpoint.html
 
-from channel import Channel
+from ..channel.channel import Channel
 
-class Sms(Channel):
+class Email(Channel):
 
 
-    def __init__(self,
-                 client_for_pinpoint,
+    def __init__(self, 
+                 client_for_pinpoint, 
                  application_id):
         """
         Intializes instace variables with the application_id
@@ -20,9 +20,10 @@ class Sms(Channel):
         self.template_name = None
 
 
-    def update_channel(self,
-                       sender_id='',
-                       short_code='', 
+    def update_channel(self, 
+                       ses_identity_arn, 
+                       from_address, 
+                       pinpoint_access_role_arn, 
                        enable=True,
                        return_response=False):
         """
@@ -30,30 +31,28 @@ class Sms(Channel):
         variable should be true, if you want to disable channel,
         pass false value in the enable variable.
 
-        param: sender_id        : The identity that you want to display on
-                                  recipients' devices when they receive messages 
-                                  from the SMS channel.
-                                  To activate it, put a request to AWS support,
-                                  after which they will verify the shortcode, and then 
-                                  you can use it. Approx 4-8 weeks is required to verify.
+        param: ses_identity_arn : ARN of your email which is approved 
+                                  by AWS to send emails. You can find 
+                                  it in SES services.
 
-        param: short_code       : The registered short code that you want to use when
-                                  you send messages through the SMS channel.
+        param: from_address     : The email address approved by AWS, 
+                                  present in SES of AWS
+
+        param: pinpoint_access_role_arn : IAM role ARN which has the 
+                                  access to pinpoint services
 
         param: return_response  : False | True, set to true if want 
                                   to return the response from AWS else
                                   nothing will be returned
-
-        param: enable           : Set to true, if you want to enable the sms
-                                  channel. 
         """
 
-        response = self.client.update_sms_channel(
+        response = self.client.update_email_channel(
                 ApplicationId=self.application_id,
-                SMSChannelRequest={
+                EmailChannelRequest={
                     'Enabled': enable,
-                    'SenderId': sender_id,
-                    'ShortCode': short_code
+                    'FromAddress': from_address,
+                    'Identity': ses_identity_arn,
+                    'RoleArn': pinpoint_access_role_arn
                 }
             )
         return response if return_response else ''
@@ -65,52 +64,55 @@ class Sms(Channel):
         Deletes the channel from the application
         """
 
-        response = self.client.delete_sms_channel(
+        response = self.client.delete_email_channel(
             ApplicationId=self.application_id
         )
         return response if return_response else ''
 
 
     def channel_details(self, 
-                        return_response=True):
+                        return_response=False):
         """
         Returns the details of email channel
         """
 
-        response = self.client.get_sms_channel(
+        response = self.client.get_email_channel(
             ApplicationId=self.application_id
         )
         return response if return_response else ''
 
 
-    def create_template(self,
+    def create_template(self, 
                         template_name=False,
                         return_response=False,
-                        **sms_request_template):                        
+                        **email_template_request):                        
         """
         Creates a template for the email channel
 
         param: template_name [REQUIRED]: The name of template. If not 
                                          provided, an error will be raised
 
-        param: **sms : {
-                            'Body': 'string', #Only thing important
+        param: **email : {
                             'DefaultSubstitutions': 'string',
+                            'HtmlPart': 'string',
                             'RecommenderId': 'string',
+                            'Subject': 'string',
                             'tags': {
                                 'string': 'string'
                             },
-                            'TemplateDescription': 'string'
-                        }
+                            'TemplateDescription': 'string',
+                            'TextPart': 'string'
+                         } 
                          To be provided as it is. For eg.
-                         create_template('Template name', Body=some_string, RecommenderId='Hello from Pinpoint')
+                         create_template('Template name', HtmlPart=some_string, Subject='Hello from Pinpoint')
         """
         
         assert template_name, 'template_name argument not set. Please provide valid string' 
-        response = self.client.create_sms_template(
-            SMSTemplateRequest=sms_request_template,
+        response = self.client.create_email_template(
+            EmailTemplateRequest=email_template_request,
             TemplateName=template_name
         )
+        self.template_name = template_name  
         return response if return_response else ''
 
                                 
@@ -138,31 +140,36 @@ class Sms(Channel):
             NextToken=next_token,
             PageSize=page_size,
             TemplateName=template_name,
-            TemplateType='SMS'
+            TemplateType='EMAIL'
         )
         return response if return_response else ''
 
 
     def set_custom_message(self,
                            body=None,
-                           message_type='TRANSACTIONAL',
-                           sender_id=None,
+                           from_address=None,
+                           html_body=None,
+                           title=None,
                            return_response=False):
         """
         Method to set custom message, if not using templates. If using templates
         then no need to use this method.
 
-        param: body:         The body of the message. [Limit : 160 characters]
+        param: body:         The body of the message.
 
-        param: message_type: TRANSACTIONAL | PROMOTIONAL
+        param: from_address: SES verified email address which will be used to send emails
 
+        param: html_body:    Html version of your body
+
+        param: title:        The subject line, or title, of the email.
         """
 
-        self.custom_sms_message = {
-            'SMSMessage': {
+        self.custom_email_message = {
+            'EmailMessage': {
                     'Body': body,
-                    'MessageType': message_type,
-                    'SenderId': sender_id
+                    'FromAddress': from_address,
+                    'HtmlBody': html_body,
+                    'Title': title
                 }
         }
-        return self.custom_sms_message if return_response else ''
+        return self.custom_email_message if return_response else ''
