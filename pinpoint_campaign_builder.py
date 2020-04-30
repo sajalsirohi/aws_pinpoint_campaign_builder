@@ -19,10 +19,11 @@ from sms_channel import Sms
 class PinpointCampaignBuilder:
 
     def __init__(self, s3_bucket_name=None,
+                 s3_folder_path=None,
                  ses_identity_arn=None,
                  pinpoint_access_role_arn=None,
                  region=None,
-                 channel_type=None,
+                 channel_type=[],
                  base_segment_id=None,
                  application_id=None,
                  application_name=None,
@@ -32,6 +33,7 @@ class PinpointCampaignBuilder:
                  email_data=None,
                  sms_data=None,
                  from_address=None,
+                 application_exists=False,
                  **additional_args):
         """
             param: s3_bucket_name:      This bucket is used to store the csv file and all project
@@ -88,11 +90,14 @@ class PinpointCampaignBuilder:
             param: sms_data         :   A list containing lists, where each list corresponds to a row entry in CSV file. 
                                         eg [['SMS', '+919092XXXXX', 'sajal']] for the headers defined in csv_file_fields.
                                         Provide phone numbers with international codes as defined by AWS.
-    """
 
-        if channel_type is None:
-            channel_type = []
-        assert channel_type, 'channel_type argument can not be empty. Eg. ["EMAIL","SMS"] | ["EMAIL"] | ["SMS"]'
+            param: s3_folder_path   :   Bucket name is required for folder_path. path defines where all the files related to
+                                        project will be stored. Default path will be {s3_bucket}/{application_id}
+
+            param: application_exists:  Default False. Set to true, if application exists. It will automatically assign the 
+                                        base_segment_id stored in s3_folder_path defined : in s3_bucket_name bucket, and fetches 
+                                        the channel type used previously and assign to self.channel_type 
+    """
         assert pinpoint_access_role_arn, 'pinpoint_access_role_arn field argument can not be empty'
 
         self.region_pinpoint = region if region else boto3.session.Session().region_name
@@ -103,26 +108,9 @@ class PinpointCampaignBuilder:
         self.application_id = application_id if application_id \
                               else self.create_application(self.application_name)
 
-        if 'EMAIL' in channel_type:
-            assert ses_identity_arn, 'Please provide ses_identity_role param if you are using EMAIL channel'
-            from_address = from_address if from_address else ses_identity_arn.split('/')[-1]
-            self.email_obj = Email(self.client_pinpoint, self.application_id)
-            self.email_obj.update_channel(ses_identity_arn, from_address, pinpoint_access_role_arn)
-
-        if 'SMS' in channel_type:
-            self.sms_obj = Sms(self.client_pinpoint, self.application_id)
-            self.sms_obj.update_channel()
-
-        if s3_bucket_name:
-            self.s3_bucket = s3_bucket_name
-            self.s3_obj = s3_utility(self.s3_bucket)
-        else:
-            self.s3_bucket = None
-            self.s3_obj = None
-
         self.segment_id_for_campaign = None
 
-        self.s3_folder_path = None
+        self.s3_folder_path = s3_folder_path if s3_folder_path else f'{self.application_id}'
 
         self.pinpoint_acc_arn = pinpoint_access_role_arn
 
@@ -139,6 +127,41 @@ class PinpointCampaignBuilder:
         self.sms_dynamic_segment_id = sms_dynamic_segment_id
 
         self.email_dynamic_segment_id = email_dynamic_segment_id
+
+        if application_exists:
+            self.fetch_pinpoint_data_from_s3()
+            self.__get_channels()
+
+        assert self.channel_type, 'channel_type argument can not be empty. Eg. ["EMAIL","SMS"] | ["EMAIL"] | ["SMS"]'
+
+        if 'EMAIL' in channel_type:
+            assert ses_identity_arn, 'Please provide ses_identity_role param if you are using EMAIL channel'
+            from_address = from_address if from_address else ses_identity_arn.split('/')[-1]
+            self.email_obj = Email(self.client_pinpoint, self.application_id)
+            if not application_exists:
+                self.email_obj.update_channel(ses_identity_arn, from_address, pinpoint_access_role_arn)
+
+        if 'SMS' in channel_type:
+            self.sms_obj = Sms(self.client_pinpoint, self.application_id)
+            if not application_exists:
+            self.sms_obj.update_channel()
+
+        if s3_bucket_name:
+            self.s3_bucket = s3_bucket_name
+            self.s3_obj = s3_utility(self.s3_bucket)
+        else:
+            self.s3_bucket = None
+            self.s3_obj = None
+
+
+
+    def __get_channels(self):
+        """
+        If application exists, assigns self.channel_type from the pinpoint application
+        """
+        response = self.client_pinpoint.get_channels(ApplicationId=self.application_id)
+        self.channel_type = [channel for channel in response['ChannelsResponse']['Channels']]
+        print(f'Available channel types -> {self.channel_type}, update/activate channels using email or sms objects')
 
 
     def create_application(self,
